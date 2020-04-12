@@ -9,8 +9,13 @@ namespace Malee.Editor {
 
 	public class ReorderableList {
 
+#if UNITY_2019_3_OR_NEWER
+		private const float ELEMENT_EDGE_TOP = 1;
+		private const float ELEMENT_EDGE_BOT = 2;
+#else
 		private const float ELEMENT_EDGE_TOP = 1;
 		private const float ELEMENT_EDGE_BOT = 3;
+#endif
 		private const float ELEMENT_HEIGHT_OFFSET = ELEMENT_EDGE_TOP + ELEMENT_EDGE_BOT;
 
 		private static int selectionHash = "ReorderableListSelection".GetHashCode();
@@ -67,6 +72,7 @@ namespace Malee.Editor {
 		public GUIContent label;
 		public float headerHeight;
 		public float footerHeight;
+		public float paginationHeight;
 		public float slideEasing;
 		public float verticalSpacing;
 		public bool showDefaultBackground;
@@ -176,8 +182,6 @@ namespace Malee.Editor {
 #else
 			verticalSpacing = 2f;
 #endif
-			headerHeight = 18f;
-			footerHeight = 13f;
 			slideEasing = 0.15f;
 			expandable = true;
 			elementLabels = true;
@@ -190,6 +194,18 @@ namespace Malee.Editor {
 			selection = new ListSelection();
 			slideGroup = new SlideGroup();
 			elementRects = new Rect[0];
+
+			//We can't access Style information yet as GUISkin hasn't loaded, so hard code the values
+
+#if UNITY_2019_3_OR_NEWER
+			headerHeight = 20f;
+			footerHeight = 20f;
+			paginationHeight = 18f;
+#else
+			headerHeight = 20f;
+			footerHeight = 13f;
+			paginationHeight = 20f;
+#endif
 		}
 
 		//
@@ -267,7 +283,7 @@ namespace Malee.Editor {
 
 			if (HasList) {
 
-				float topHeight = doPagination ? headerHeight * 2 : headerHeight;
+				float topHeight = doPagination ? headerHeight + paginationHeight : headerHeight;
 
 				return list.isExpanded ? topHeight + GetElementsHeight() + footerHeight : headerHeight;
 			}
@@ -275,6 +291,11 @@ namespace Malee.Editor {
 
 				return EditorGUIUtility.singleLineHeight;
 			}
+		}
+
+		public float GetElementHeight(int index) {
+
+			return index >= 0 && index < Length ? GetElementHeight(list.GetArrayElementAtIndex(index)) : 0;
 		}
 
 		public void DoLayoutList() {
@@ -309,10 +330,15 @@ namespace Malee.Editor {
 
 						Rect paginateHeaderRect = headerRect;
 						paginateHeaderRect.y += headerRect.height;
+						paginateHeaderRect.height = paginationHeight;
 
 						DrawPaginationHeader(paginateHeaderRect);
 
+#if UNITY_2019_3_OR_NEWER
+						headerRect.yMax = paginateHeaderRect.yMax;
+#else
 						headerRect.yMax = paginateHeaderRect.yMax - 1;
+#endif
 					}
 
 					Rect elementBackgroundRect = rect;
@@ -361,6 +387,7 @@ namespace Malee.Editor {
 					Rect footerRect = rect;
 					footerRect.yMin = elementBackgroundRect.yMax;
 					footerRect.xMin = rect.xMax - 58;
+					footerRect.height = footerHeight;
 
 					DrawFooter(footerRect);
 				}
@@ -384,8 +411,6 @@ namespace Malee.Editor {
 		public SerializedProperty AddItem() {
 
 			if (HasList) {
-
-				//TODO Validate add on multiple selected objects
 
 				list.arraySize++;
 				selection.Select(list.arraySize - 1);
@@ -426,8 +451,6 @@ namespace Malee.Editor {
 
 				list.DeleteArrayElementAtIndex(index);
 				selection.Remove(index);
-
-				//TODO Validate removal on multiple selected objects
 
 				if (Length > 0) {
 
@@ -609,8 +632,6 @@ namespace Malee.Editor {
 			Rect titleRect = rect;
 			titleRect.xMin += 6f;
 			titleRect.xMax -= multiline ? 95f : 55f;
-			titleRect.height -= 2f;
-			titleRect.y++;
 
 			label = EditorGUI.BeginProperty(titleRect, label, list);
 
@@ -644,7 +665,7 @@ namespace Malee.Editor {
 				bRect1.xMin = rect.xMax - 25;
 				bRect1.xMax = rect.xMax - 5;
 
-				if (GUI.Button(bRect1, Style.expandButton, Style.preButton)) {
+				if (GUI.Button(bRect1, Style.expandButton, Style.preButtonStretch)) {
 
 					ExpandElements(true);
 				}
@@ -653,7 +674,7 @@ namespace Malee.Editor {
 				bRect2.xMin = bRect1.xMin - 20;
 				bRect2.xMax = bRect1.xMin;
 
-				if (GUI.Button(bRect2, Style.collapseButton, Style.preButton)) {
+				if (GUI.Button(bRect2, Style.collapseButton, Style.preButtonStretch)) {
 
 					ExpandElements(false);
 				}
@@ -673,12 +694,12 @@ namespace Malee.Editor {
 				sortRect2.xMin = sortRect1.xMin - 20;
 				sortRect2.xMax = sortRect1.xMin;
 
-				if (EditorGUI.DropdownButton(sortRect1, Style.sortAscending, FocusType.Passive, Style.preButton)) {
+				if (EditorGUI.DropdownButton(sortRect1, Style.sortAscending, FocusType.Passive, Style.preButtonStretch)) {
 
 					SortElements(sortRect1, false);
 				}
 
-				if (EditorGUI.DropdownButton(sortRect2, Style.sortDescending, FocusType.Passive, Style.preButton)) {
+				if (EditorGUI.DropdownButton(sortRect2, Style.sortDescending, FocusType.Passive, Style.preButtonStretch)) {
 
 					SortElements(sortRect2, true);
 				}
@@ -897,15 +918,21 @@ namespace Malee.Editor {
 
 		private void DrawElement(SerializedProperty element, Rect rect, bool selected, bool focused) {
 
+			Rect backgroundRect = rect;
+
+#if UNITY_2019_3_OR_NEWER
+			backgroundRect.xMin++;
+			backgroundRect.xMax--;
+#endif
 			Event evt = Event.current;
 
 			if (drawElementBackgroundCallback != null) {
 
-				drawElementBackgroundCallback(rect, element, null, selected, focused);
+				drawElementBackgroundCallback(backgroundRect, element, null, selected, focused);
 			}
 			else if (evt.type == EventType.Repaint) {
 
-				Style.elementBackground.Draw(rect, false, selected, selected, focused);
+				Style.elementBackground.Draw(backgroundRect, false, selected, selected, focused);
 			}
 
 			if (evt.type == EventType.Repaint && draggable) {
@@ -1081,8 +1108,8 @@ namespace Malee.Editor {
 				Style.footerBackground.Draw(rect, false, false, false, false);
 			}
 
-			Rect addRect = new Rect(rect.xMin + 4f, rect.y - 3f, 25f, 13f);
-			Rect subRect = new Rect(rect.xMax - 29f, rect.y - 3f, 25f, 13f);
+			Rect addRect = new Rect(rect.xMin + 4f, rect.y, 25f, Style.preButton.fixedHeight);
+			Rect subRect = new Rect(rect.xMax - 29f, rect.y, 25f, Style.preButton.fixedHeight);
 
 			EditorGUI.BeginDisabledGroup(!canAdd);
 
@@ -1137,9 +1164,9 @@ namespace Malee.Editor {
 				HandleUtility.Repaint();
 			}
 
-			Rect prevRect = new Rect(rect.xMin + 4f, rect.y - 1f, 17f, 14f);
-			Rect popupRect = new Rect(prevRect.xMax, rect.y - 1f, 14f, 14f);
-			Rect nextRect = new Rect(popupRect.xMax, rect.y - 1f, 17f, 14f);
+			Rect prevRect = new Rect(rect.xMin + 4f, rect.y, 17f, rect.height - 1);
+			Rect popupRect = new Rect(prevRect.xMax, rect.y, 14f, rect.height - 1);
+			Rect nextRect = new Rect(popupRect.xMax, rect.y, 17f, rect.height - 1);
 
 			if (Event.current.type == EventType.Repaint) {
 
@@ -1149,9 +1176,7 @@ namespace Malee.Editor {
 			pageInfoContent.text = string.Format(Style.PAGE_INFO_FORMAT, pagination.page + 1, pages);
 
 			Rect pageInfoRect = rect;
-			pageInfoRect.width = Style.paginationText.CalcSize(pageInfoContent).x;
-			pageInfoRect.x = rect.xMax - pageInfoRect.width - 7;
-			pageInfoRect.y += 2;
+			pageInfoRect.xMin = rect.xMax - Style.paginationText.CalcSize(pageInfoContent).x - 7;
 
 			//draw page info
 
@@ -1159,12 +1184,12 @@ namespace Malee.Editor {
 
 			//draw page buttons and page popup
 
-			if (GUI.Button(prevRect, Style.iconPagePrev, Style.preButton)) {
+			if (GUI.Button(prevRect, Style.iconPagePrev, Style.preButtonStretch)) {
 
 				pagination.page = Mathf.Max(0, pagination.page - 1);
 			}
 
-			if (EditorGUI.DropdownButton(popupRect, Style.iconPagePopup, FocusType.Passive, Style.preButton)) {
+			if (EditorGUI.DropdownButton(popupRect, Style.iconPagePopup, FocusType.Passive, Style.preButtonStretch)) {
 
 				GenericMenu menu = new GenericMenu();
 
@@ -1178,7 +1203,7 @@ namespace Malee.Editor {
 				menu.DropDown(popupRect);
 			}
 
-			if (GUI.Button(nextRect, Style.iconPageNext, Style.preButton)) {
+			if (GUI.Button(nextRect, Style.iconPageNext, Style.preButtonStretch)) {
 
 				pagination.page = Mathf.Min(pages - 1, pagination.page + 1);
 			}
@@ -1186,31 +1211,28 @@ namespace Malee.Editor {
 			//if we're allowed to control the page size manually, show an editor
 
 			bool useFixedPageSize = pagination.fixedPageSize > 0;
+			int currentPageSize = useFixedPageSize ? pagination.fixedPageSize : pagination.customPageSize;
 
 			EditorGUI.BeginDisabledGroup(useFixedPageSize);
 
-			pageSizeContent.text = total.ToString();
+			pageSizeContent.text = currentPageSize.ToString();
 
 			GUIStyle style = Style.pageSizeTextField;
 			Texture icon = Style.listIcon.image;
 
-			float min = nextRect.xMax + 5;
-			float max = pageInfoRect.xMin - 5;
-			float space = max - min;
 			float labelWidth = icon.width + 2;
-			float width = style.CalcSize(pageSizeContent).x + 50 + labelWidth;
+			float width = style.CalcSize(pageSizeContent).x + 50;
 
 			Rect pageSizeRect = rect;
-			pageSizeRect.y--;
-			pageSizeRect.x = min + (space - width) / 2;
-			pageSizeRect.width = width - labelWidth;
+			pageSizeRect.x = rect.center.x - (width - labelWidth) / 2;
+			pageSizeRect.width = width;
 
 			EditorGUI.BeginChangeCheck();
 
 			EditorGUIUtility.labelWidth = labelWidth;
 			EditorGUIUtility.SetIconSize(new Vector2(icon.width, icon.height));
 
-			int newPageSize = EditorGUI.DelayedIntField(pageSizeRect, Style.listIcon, useFixedPageSize ? pagination.fixedPageSize : pagination.customPageSize, style);
+			int newPageSize = EditorGUI.DelayedIntField(pageSizeRect, Style.listIcon, currentPageSize, style);
 
 			EditorGUIUtility.labelWidth = 0;
 			EditorGUIUtility.SetIconSize(Vector2.zero);
@@ -1245,7 +1267,7 @@ namespace Malee.Editor {
 
 			if (element.isInstantiatedPrefab) {
 
-				menu.AddItem(new GUIContent("Revert " + GetElementLabel(element, true).text + " to Prefab"), false, selection.RevertValues, list);
+				menu.AddItem(new GUIContent($"Revert { GetElementLabel(element, true).text } to Prefab"), false, selection.RevertValues, list);
 				menu.AddSeparator(string.Empty);
 			}
 
@@ -1470,47 +1492,6 @@ namespace Malee.Editor {
 
 				evt.Use();
 			}
-
-			/* TODO This is buggy. The reason for this is to allow selection and dragging of an element using the header, or top row (if any)
-			 * The main issue here is determining whether the element has an "expandable" drop down arrow, which if it does, will capture the mouse event *without* the code below
-			 * Because of property drawers and certain property types, it's impossible to know this automatically (without dirty reflection)
-			 * So if the below code is active and we determine that the property is expandable but isn't actually. Then we'll accidently capture the mouse focus and prevent anything else from receiving it :(
-			 * So for now, in order to drag or select a row, the user must select empty space on the row. Not a huge deal, and doesn't break functionality.
-			 * What needs to happen is the drag event needs to occur independent of the event type. But that's messy too, as some controls have horizontal drag sliders :(
-			if (evt.type == EventType.MouseDown) {
-
-				//check if we contain the mouse press
-				//we also need to check what has current focus. If nothing we can assume control
-				//if there's something, check if the header has been pressed if the element is expandable
-				//if we did press the header, then override the control
-
-				if (rect.Contains(evt.mousePosition) && IsSelectionButton(evt)) {
-
-					int index = GetSelectionIndex(evt.mousePosition);
-
-					if (CanSelect(index)) {
-
-						SerializedProperty element = list.GetArrayElementAtIndex(index);
-
-						if (IsElementExpandable(element)) {
-
-							Rect elementHeaderRect = GetElementHeaderRect(element, elementRects[index]);
-							Rect elementRenderRect = GetElementRenderRect(element, elementRects[index]);
-
-							Rect elementExpandRect = elementHeaderRect;
-							elementExpandRect.xMin = elementRenderRect.xMin - 10;
-							elementExpandRect.xMax = elementRenderRect.xMin;
-
-							if (elementHeaderRect.Contains(evt.mousePosition) && !elementExpandRect.Contains(evt.mousePosition)) {
-
-								DoSelection(index, true, evt);
-								HandleUtility.Repaint();
-							}
-						}
-					}
-				}
-			}
-			*/
 		}
 
 		private void HandlePostSelection(Rect rect, Event evt) {
@@ -1860,6 +1841,7 @@ namespace Malee.Editor {
 			internal static GUIStyle paginationHeader;
 			internal static GUIStyle boxBackground;
 			internal static GUIStyle preButton;
+			internal static GUIStyle preButtonStretch;
 			internal static GUIStyle elementBackground;
 			internal static GUIStyle verticalLabel;
 			internal static GUIContent expandButton;
@@ -1876,9 +1858,9 @@ namespace Malee.Editor {
 				iconToolbarMinus = EditorGUIUtility.IconContent("Toolbar Minus", "Remove selection from list");
 				iconPagePrev = EditorGUIUtility.IconContent("Animation.PrevKey", "Previous page");
 				iconPageNext = EditorGUIUtility.IconContent("Animation.NextKey", "Next page");
-				
+
 #if UNITY_2018_3_OR_NEWER
-				iconPagePopup = EditorGUIUtility.IconContent("ShurikenPopup", "Select page");
+				iconPagePopup = EditorGUIUtility.IconContent("PopupCurveEditorDropDown", "Select page");
 #else
 				iconPagePopup = EditorGUIUtility.IconContent("MiniPopupNoBg", "Select page");
 #endif
@@ -1887,16 +1869,20 @@ namespace Malee.Editor {
 				paginationText.fontSize = EditorStyles.miniTextField.fontSize;
 				paginationText.font = EditorStyles.miniFont;
 				paginationText.normal.textColor = EditorStyles.miniTextField.normal.textColor;
-				paginationText.alignment = TextAnchor.UpperLeft;
+				paginationText.alignment = TextAnchor.MiddleLeft;
 				paginationText.clipping = TextClipping.Clip;
 
+#if UNITY_2019_3_OR_NEWER
+				pageSizeTextField = new GUIStyle("RL Background");
+#else
 				pageSizeTextField = new GUIStyle("RL Footer");
+				pageSizeTextField.overflow = new RectOffset(0, 0, -2, -3);
+				pageSizeTextField.contentOffset = new Vector2(0, -1);
+#endif
 				pageSizeTextField.alignment = TextAnchor.MiddleLeft;
 				pageSizeTextField.clipping = TextClipping.Clip;
 				pageSizeTextField.fixedHeight = 0;
 				pageSizeTextField.padding = new RectOffset(3, 0, 0, 0);
-				pageSizeTextField.overflow = new RectOffset(0, 0, -2, -3);
-				pageSizeTextField.contentOffset = new Vector2(0, -1);
 				pageSizeTextField.font = EditorStyles.miniFont;
 				pageSizeTextField.fontSize = EditorStyles.miniTextField.fontSize;
 				pageSizeTextField.fontStyle = FontStyle.Normal;
@@ -1905,9 +1891,14 @@ namespace Malee.Editor {
 				draggingHandle = new GUIStyle("RL DragHandle");
 				headerBackground = new GUIStyle("RL Header");
 				footerBackground = new GUIStyle("RL Footer");
-				//paginationHeader = new GUIStyle("RectangleToolHBar");
+
+#if UNITY_2019_3_OR_NEWER
+				paginationHeader = new GUIStyle("TimeRulerBackground");
+				paginationHeader.fixedHeight = 0;
+#else
 				paginationHeader = new GUIStyle("RL Element");
 				paginationHeader.border = new RectOffset(2, 3, 2, 3);
+#endif
 				elementBackground = new GUIStyle("RL Element");
 				elementBackground.border = new RectOffset(2, 3, 2, 3);
 				verticalLabel = new GUIStyle(EditorStyles.label);
@@ -1915,7 +1906,16 @@ namespace Malee.Editor {
 				verticalLabel.contentOffset = new Vector2(10, 3);
 				boxBackground = new GUIStyle("RL Background");
 				boxBackground.border = new RectOffset(6, 3, 3, 6);
+
+#if UNITY_2019_3_OR_NEWER
 				preButton = new GUIStyle("RL FooterButton");
+#else
+				preButton = new GUIStyle("RL FooterButton");
+				preButton.contentOffset = new Vector2(0, -4);
+#endif
+				preButtonStretch = new GUIStyle("RL FooterButton");
+				preButtonStretch.fixedHeight = 0;
+				preButtonStretch.stretchHeight = true;
 
 				expandButton = EditorGUIUtility.IconContent("winbtn_win_max");
 				expandButton.tooltip = "Expand All Elements";
